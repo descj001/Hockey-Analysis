@@ -1,0 +1,166 @@
+---
+title: "Stat479p2.pt2"
+author: "Elliot Descarpentrie"
+date: "2025-09-19"
+output: html_document
+---
+
+
+
+```{r}
+
+```
+
+```{r}
+library(hockeyR) 
+library(tidyverse)
+library(yardstick)
+
+```
+
+```{r}
+pbp_23 <- load_pbp('2023-24')
+pbp_22 <- load_pbp('2022-23')
+pbp_21 <- load_pbp('2021-22')
+pbp_20 <- load_pbp('2020-21')
+
+```
+```{r}
+print(pbp_23)
+
+
+```
+
+```{r}
+
+pbp_all <- bind_rows(
+  mutate(pbp_22),
+  mutate(pbp_21),
+  mutate(pbp_20)
+)
+
+```
+
+```{r}
+pbp_all
+
+```
+```{r}
+colnames(pbp_all)
+```
+```{r}
+shots <- pbp_all %>%
+  filter(event_type %in% c("SHOT", "GOAL", "MISSED_SHOT"))
+shots
+
+shots %>%
+  dplyr::count(secondary_type)
+shots <- shots %>%
+  dplyr::mutate(Y = ifelse(event_type == "GOAL", 1, 0))
+
+
+shots %>%
+  dplyr::group_by(secondary_type) %>%
+  dplyr::summarize(
+    shots = n(),
+    goals = sum(Y),
+    shooting_pct = mean(Y)
+  )
+```
+
+```{r}
+shots_summary <- shots %>%
+  group_by(secondary_type) %>%
+  summarize(
+    shooting_pct = mean(Y),
+    .groups = "drop"
+  )
+
+
+shots_with_pred <- shots %>%
+  left_join(shots_summary, by = "secondary_type")
+
+```
+
+```{r}
+shots_with_pred
+```
+
+```{r}
+
+hockey_goe <- 
+  shots_with_pred %>%
+  dplyr::mutate(diff = Y - xg) %>%
+  dplyr::group_by(event_player_1_name) %>%   
+  dplyr::summarise(
+    GOE = round(sum(diff),4),
+    n = dplyr::n()
+  ) %>%
+  dplyr::arrange(dplyr::desc(GOE))
+
+hockey_goe
+```
+
+```{r}
+shots_summary <- shots %>%
+  group_by(secondary_type) %>%
+  summarize(
+    shooting_pct = mean(Y),
+    .groups = "drop"
+  )
+
+shots_with_pred <- shots %>%
+  left_join(shots_summary, by = "secondary_type")
+
+logloss <- function(y, phat){
+  if(any(phat < 1e-12)) phat[phat < 1e-12] <- 1e-12
+  if(any(phat > 1 - 1e-12)) phat[phat > 1 - 1e-12] <- 1 - 1e-12
+  return(-1 * mean(y * log(phat) + (1 - y) * log(1 - phat)))
+}
+
+cat("Shot Type Log Loss:",
+    round(logloss(shots_with_pred$Y, shots_with_pred$shooting_pct), 3), "\n")
+
+```
+
+```{r}
+shots_23 <- pbp_23 %>%
+  filter(season == "20232024",  
+         event_type %in% c("SHOT", "GOAL", "MISSED_SHOT"))
+
+shots_23
+```
+
+```{r}
+xg_by_type <- shots_with_pred %>%
+  group_by(secondary_type) %>%
+  summarise(
+    shooting_pct = mean(Y),
+    .groups = "drop"
+  )
+
+xg_by_type
+
+
+shots_23 <- pbp_23 %>%
+  filter(event_type %in% c("SHOT", "GOAL")) %>%
+  mutate(Y = ifelse(event_type == "GOAL", 1, 0),
+         secondary_type = tolower(trimws(secondary_type)))
+
+shots_23
+
+shots_23_with_pred <- shots_23 %>%
+  mutate(secondary_type = (secondary_type)) %>%
+  left_join(
+    xg_by_type %>% 
+      mutate(secondary_type = (secondary_type)),
+    by = "secondary_type"
+  )
+
+
+shots_23_with_pred
+```
+
+```{r}
+
+```
